@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Weather Dashboard</title>
+
+<!-- Google Gauge -->
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  :root {
+    --bg: #f4f4f4;
+    --card: #ffffff;
+    --text: #000000;
+  }
+
+  body.dark {
+    --bg: #0b1220;
+    --card: #111827;
+    --text: #e5e7eb;
+  }
+
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.3s, color 0.3s;
+  }
+
+  header {
+    background: var(--card);
+    padding: 14px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+    position: relative;
+  }
+
+  .dark-btn {
+    position: absolute;
+    right: 15px;
+    top: 14px;
+    cursor: pointer;
+    font-size: 20px;
+  }
+
+  .container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    padding: 15px;
+  }
+
+  @media (min-width: 768px) {
+    .container {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .card {
+    background: var(--card);
+    padding: 15px;
+    border-radius: 14px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+  }
+
+  canvas {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  #info {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 16px;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  🌤 Amritsar Live Weather
+  <span class="dark-btn" onclick="toggleDark()">🌙</span>
+</header>
+
+<div class="container">
+
+  <!-- Gauge Card -->
+  <div class="card">
+    <div id="gauge_div" style="width:100%; height:200px;"></div>
+    <div id="info">Loading...</div>
+  </div>
+
+  <!-- Graph Card -->
+  <div class="card">
+    <canvas id="weatherChart"></canvas>
+  </div>
+
+</div>
+
+<script>
+/* ================= DARK MODE (DEFAULT ON) ================= */
+if (localStorage.getItem("theme") === "light") {
+  document.body.classList.remove("dark");
+} else {
+  document.body.classList.add("dark");
+  localStorage.setItem("theme", "dark");
+}
+
+function toggleDark() {
+  document.body.classList.toggle("dark");
+  localStorage.setItem(
+    "theme",
+    document.body.classList.contains("dark") ? "dark" : "light"
+  );
+}
+
+/* ================= CONFIG ================= */
+const API_KEY = "8a00f40e6db6cc9082af0472203c40bc";
+const CITY = "Amritsar";
+const COUNTRY = "IN";
+
+/* ================= GOOGLE GAUGE ================= */
+google.charts.load('current', {'packages':['gauge']});
+google.charts.setOnLoadCallback(initGauge);
+
+let gaugeData, gauge, gaugeOptions;
+
+function initGauge() {
+  gaugeData = google.visualization.arrayToDataTable([
+    ['Label', 'Value'],
+    ['Temp °C', 0],
+    ['Humidity %', 0]
+  ]);
+
+  gaugeOptions = {
+    max: 100,
+    redFrom: 45, redTo: 60,
+    yellowFrom: 35, yellowTo: 45,
+    minorTicks: 5
+  };
+
+  gauge = new google.visualization.Gauge(
+    document.getElementById('gauge_div')
+  );
+
+  gauge.draw(gaugeData, gaugeOptions);
+
+  fetchWeather();
+  setInterval(fetchWeather, 60000); // every 60 sec
+}
+
+/* ================= LINE GRAPH ================= */
+const ctx = document.getElementById('weatherChart').getContext('2d');
+const weatherChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'Temperature °C',
+        data: [],
+        borderWidth: 2,
+        tension: 0.4
+      },
+      {
+        label: 'Humidity %',
+        data: [],
+        borderWidth: 2,
+        tension: 0.4
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#999' } }
+    },
+    scales: {
+      x: { ticks: { color: '#999' } },
+      y: { ticks: { color: '#999' } }
+    }
+  }
+});
+
+/* ================= FETCH WEATHER ================= */
+function fetchWeather() {
+  fetch(`https://api.openweathermap.org/data/2.5/weather?q=${CITY},${COUNTRY}&units=metric&appid=${API_KEY}`)
+    .then(res => res.json())
+    .then(json => {
+      const temp = json.main.temp;
+      const hum  = json.main.humidity;
+      const time = new Date().toLocaleTimeString();
+
+      // Update Gauge
+      gaugeData.setValue(0, 1, temp);
+      gaugeData.setValue(1, 1, hum);
+      gauge.draw(gaugeData, gaugeOptions);
+
+      // Info text
+      document.getElementById("info").innerHTML =
+        `📍 ${CITY} | 🌡 ${temp} °C | 💧 ${hum}% | ⏱ ${time}`;
+
+      // Update graph (keep last 24 points)
+      weatherChart.data.labels.push(time);
+      weatherChart.data.datasets[0].data.push(temp);
+      weatherChart.data.datasets[1].data.push(hum);
+
+      if (weatherChart.data.labels.length > 24) {
+        weatherChart.data.labels.shift();
+        weatherChart.data.datasets[0].data.shift();
+        weatherChart.data.datasets[1].data.shift();
+      }
+
+      weatherChart.update();
+    })
+    .catch(() => {
+      document.getElementById("info").innerHTML = "❌ Weather load failed";
+    });
+}
+</script>
+
+</body>
+</html>
